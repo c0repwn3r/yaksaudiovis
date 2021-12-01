@@ -54,6 +54,8 @@ class App(ttk.Frame):
 
         self.file_location = tk.StringVar()
 
+        self.progress = tk.DoubleVar(value=0.0)
+
         # Create widgets
         self.options_frame = ttk.LabelFrame(self, text="Options", padding=(20, 10)) # Frame to contain options
         self.options_frame.grid(
@@ -106,13 +108,39 @@ class App(ttk.Frame):
             row=0, column=0, padx=5, pady=10, sticky="nswe"
         )
 
-        self.go_btn = ttk.Button(self.files, text="Go!")
+        self.go_btn = ttk.Button(self.files, text="Go!", style="Accent.TButton", command=self.go)
         self.go_btn.grid(
             row=1, column=0, padx=5, pady=10, sticky="nswe"
         )
 
+        self.label = ttk.Label(
+            self.files,
+            text="0/9 Ready",
+            justify="center",
+            font=("-size", 15, "-weight", "bold")
+        )
+        self.label.grid(
+            row=2, column=0, padx=5, pady=10, sticky="nswe"
+        )
+
+        self.progress = ttk.Progressbar(
+            self.files, value=0, variable=self.progress, mode="determinate"
+        )
+        self.progress.grid(
+            row=3, column=0, padx=5, pady=10, sticky="nswe"
+        )
+
     def reevaluate_options(self):
-        pass
+        if not self.enable_average and not self.enable_peakcount:
+            self.go_btn['state'] = 'disabled'
+            return
+        if not self.show_log_window and not self.show_plot:
+            self.go_btn['state'] = 'disabled'
+            return
+        self.go_btn['state'] = 'enabled'
+
+    def go(self):
+        print('Go!')
 
 
 logger.info('Creating window')

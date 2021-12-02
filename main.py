@@ -9,7 +9,8 @@ import lolcat
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
-import os
+import matplotlib
+from matplotlib import font_manager
 
 logger = logger.Logger('MainThread', logger.LogLevel.DEBUG)  # Setup main thread logger
 
@@ -49,12 +50,10 @@ class App(ttk.Frame):
         self.custom_sample_size = tk.BooleanVar(value=False)
         self.use_stereo = tk.BooleanVar(value=False)
 
-        self.show_log_window = tk.BooleanVar(value=True)
-        self.show_plot = tk.BooleanVar(value=True)
-
         self.file_location = tk.StringVar()
 
-        self.progress = tk.DoubleVar(value=0.0)
+        self.progress_var = tk.DoubleVar(value=0.0)
+        self.task_progress_var = tk.DoubleVar(value=0.0)
 
         # Create widgets
         self.options_frame = ttk.LabelFrame(self, text="Options", padding=(20, 10)) # Frame to contain options
@@ -84,18 +83,6 @@ class App(ttk.Frame):
         )
         self.use_stereo_chk.grid(row=2, column=0, padx=5, pady=10, sticky="nswe")
 
-        self.show_log_window_chk = ttk.Checkbutton(
-            self.options_frame, text="Show log window", variable=self.show_log_window,
-            command=self.reevaluate_options
-        )
-        self.show_log_window_chk.grid(row=3, column=0, padx=5, pady=10, sticky="nswe")
-
-        self.show_plot_chk = ttk.Checkbutton(
-            self.options_frame, text="Show plot window", variable=self.show_plot,
-            command=self.reevaluate_options
-        )
-        self.show_plot_chk.grid(row=4, column=0, padx=5, pady=10, sticky="nswe")
-
         # Control
         self.files = ttk.LabelFrame(self, text="Control", padding=(20, 10))  # Frame to contain options
         self.files.grid(
@@ -107,6 +94,8 @@ class App(ttk.Frame):
         self.file_location_entry.grid(
             row=0, column=0, padx=5, pady=10, sticky="nswe"
         )
+
+        self.file_location_entry.bind('<Double-Button-1>', self.select_file)
 
         self.go_btn = ttk.Button(self.files, text="Go!", style="Accent.TButton", command=self.go)
         self.go_btn.grid(
@@ -124,23 +113,50 @@ class App(ttk.Frame):
         )
 
         self.progress = ttk.Progressbar(
-            self.files, value=0, variable=self.progress, mode="determinate"
+            self.files, value=0, variable=self.progress_var, mode="determinate", length=6
         )
         self.progress.grid(
             row=3, column=0, padx=5, pady=10, sticky="nswe"
+        )
+
+        self.task_progress = ttk.Progressbar(
+            self.files, value=0, variable=self.task_progress_var, mode="determinate", length=0
+        )
+        self.task_progress.grid(
+            row=4, column=0, padx=5, pady=10, sticky="nswe"
         )
 
     def reevaluate_options(self):
         if not self.enable_average and not self.enable_peakcount:
             self.go_btn['state'] = 'disabled'
             return
-        if not self.show_log_window and not self.show_plot:
-            self.go_btn['state'] = 'disabled'
-            return
         self.go_btn['state'] = 'enabled'
 
+    def select_file(self, smth):
+        root = tk.Tk()
+        root.withdraw()
+        _file = filedialog.askopenfilename()
+        self.file_location.set(_file)
+
+    def set_progress(self, msg, amt):
+        self.progress_var.set(amt / 6)
+        self.label['text'] = msg
+        window.update_idletasks()
+        self.update_idletasks()
+        self.update()
+        window.update()
+
+    def set_task_progress(self, amt, total):
+        self.task_progress['length'] = total
+        self.task_progress_var.set(amt / total)
+        window.update_idletasks()
+        self.update_idletasks()
+        self.update()
+        window.update()
+
     def go(self):
-        print('Go!')
+        self.set_progress('Updating font cache', 1)
+        self.set_progress('Importing audio data', 2)
 
 
 logger.info('Creating window')

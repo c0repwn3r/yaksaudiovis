@@ -8,8 +8,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from time import perf_counter, sleep
 import math
+import tkinter as tk
+from tkinter import filedialog
 
-_file = 'test.wav'
+root = tk.Tk()
+root.withdraw()
+_file = filedialog.askopenfilename()
 print('importing wav data', end='\r')
 start_time = perf_counter()
 samplerate, data = wavfile.read(_file)
@@ -24,8 +28,8 @@ start_time = perf_counter()
 print(f'splitting: 0/{len(data)}', end='\r')
 for index, val in enumerate(data):
     print(f'splitting: {index}/{len(data)}', end='\r')
-    left.append(val[0])
-    right.append(val[1])
+    left.append(val)
+    #right.append(val[1])
 print(f'split {len(data)} entries in {perf_counter() - start_time} seconds')
 
 peak_left = [max(left)] * len(left)
@@ -36,9 +40,10 @@ peak_valley_count = len([left[idx] for idx in range(1, len(left) - 1) if left[id
            left[idx] < left[idx - 1] or left[idx + 1] < left[idx] > left[idx - 1]])
 print(f'peak/valley count: {peak_valley_count}')
 
-rms = [20 * math.log10(abs(peak_left[0] / min_left[0] + 0.001))] * len(left)
+rms = [20 * math.log10(abs(peak_left[0]))] * len(left)
+print(rms[0])
 
-plt.plot(time, npdata[:, 0], label="Audio data")
+plt.plot(time, npdata[:], label="Audio data")
 plt.plot(time, peak_left, label="Peak")
 plt.plot(time, rms, label="Reference dB")
 plt.legend()

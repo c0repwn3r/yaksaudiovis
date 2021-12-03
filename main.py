@@ -52,6 +52,9 @@ class App(ttk.Frame):
         self.enable_peakcount = tk.BooleanVar(value=True)
         self.enable_average = tk.BooleanVar(value=True)
 
+        self.show_plot = tk.BooleanVar(value=True)
+        self.show_results = tk.BooleanVar(value=True)
+
         self.file_location = tk.StringVar()
 
         self.progress_var = tk.DoubleVar(value=0.0)
@@ -74,6 +77,18 @@ class App(ttk.Frame):
         )
         self.average_chk.grid(row=1, column=0, padx=5, pady=10, sticky="nswe")
 
+        self.plot_chk = ttk.Checkbutton(
+            self.options_frame, text="Show plot", variable=self.show_plot,
+            command=self.reevaluate_options
+        )
+        self.plot_chk.grid(row=2, column=0, padx=5, pady=10, sticky="nswe")
+
+        self.result_chk = ttk.Checkbutton(
+            self.options_frame, text="Show results", variable=self.show_results,
+            command=self.reevaluate_options
+        )
+        self.result_chk.grid(row=3, column=0, padx=5, pady=10, sticky="nswe")
+
         # Control
         self.files = ttk.LabelFrame(self, text="Control", padding=(20, 10))  # Frame to contain options
         self.files.grid(
@@ -87,6 +102,7 @@ class App(ttk.Frame):
         )
 
         self.file_location_entry.bind('<Double-Button-1>', self.select_file)
+        self.file_location.trace_add('write', self.reevaluate_options)
 
         self.go_btn = ttk.Button(self.files, text="Go!", style="Accent.TButton", command=self.go)
         self.go_btn.grid(
@@ -95,7 +111,7 @@ class App(ttk.Frame):
 
         self.label = ttk.Label(
             self.files,
-            text="0/9 Ready",
+            text="0/7 Ready",
             justify="center",
             font=("-size", 12)
         )
@@ -117,15 +133,7 @@ class App(ttk.Frame):
             row=4, column=0, padx=5, pady=10, sticky="nswe"
         )
 
-    def reevaluate_options(self):
-        if not self.enable_average and not self.enable_peakcount:
-            self.go_btn['state'] = 'disabled'
-            return
-        self.go_btn['state'] = 'enabled'
-
-    def select_file(self, smth):
-        _file = easygui.fileopenbox()
-        self.file_location.set(_file)
+        self.reevaluate_options()
 
     def set_progress(self, msg, amt):
         self.task_progress['maximum'] = 7
@@ -138,6 +146,32 @@ class App(ttk.Frame):
         self.task_progress_var.set(amt)
         window.update_idletasks()
         window.update()
+
+    def reevaluate_options(self, a=None, b=None, c=None, d=None):
+        to_do = True
+        good_file = True
+        if not self.show_plot.get() and not self.show_results.get():
+            to_do = False
+        else:
+            to_do = True
+        if not os.path.exists(self.file_location.get()):
+            good_file = False
+        else:
+            good_file = True
+        if not to_do:
+            self.set_progress('Nothing to do', 0)
+            self.go_btn['state'] = 'disabled'
+        elif not good_file:
+            self.set_progress('Invalid file', 0)
+            self.go_btn['state'] = 'disabled'
+        else:
+            self.set_progress('Ready', 0)
+            self.go_btn['state'] = 'normal'
+
+    def select_file(self, smth):
+        _file = easygui.fileopenbox()
+        self.file_location.set(_file)
+        self.reevaluate_options()
 
     def go(self):
         # 0/7 Ready
@@ -213,16 +247,17 @@ class App(ttk.Frame):
         rms = [20 * math.log10(abs(peak_left[0]))] * len(left)
         logger.info(f'RMS volume level: {rms[0]}')
 
-        popup = tk.Toplevel(window)
-        popup.title('Results')
-        tk.Label(popup, text=f'RMS Volume: {round(rms[0], 3)}').pack()
-        if self.enable_peakcount.get():
-            tk.Label(popup, text=f'Peak count: {peak_valley_count}').pack()
-        tk.Label(popup, text=f'Audio length: {round(length, 2)}s').pack()
-        tk.Label(popup, text=f'Entries: {total}').pack()
-        tk.Label(popup, text=f'Samplerate: {samplerate}').pack()
-        if self.enable_average.get():
-            tk.Label(popup, text=f'Average: {sum(data) / len(data)}').pack()
+        if self.show_results.get():
+            popup = tk.Toplevel(window)
+            popup.title('Results')
+            tk.Label(popup, text=f'RMS Volume: {round(rms[0], 3)}').pack()
+            if self.enable_peakcount.get():
+                tk.Label(popup, text=f'Peak count: {peak_valley_count}').pack()
+            tk.Label(popup, text=f'Audio length: {round(length, 2)}s').pack()
+            tk.Label(popup, text=f'Entries: {total}').pack()
+            tk.Label(popup, text=f'Samplerate: {samplerate}').pack()
+            if self.enable_average.get():
+                tk.Label(popup, text=f'Average: {sum(data) / len(data)}').pack()
 
         rtime = perf_counter() - analysis_start_time
         rtime = round(rtime, 3)
@@ -231,13 +266,14 @@ class App(ttk.Frame):
 
         logger.info(f'Finished analysis in {rtime}s')
 
-        plt.plot(time, npdata[:], label="Audio data")
-        plt.plot(time, peak_left, label="Peak")
-        plt.plot(time, rms, label="Reference dB")
-        plt.legend()
-        plt.xlabel("Time [s]")
-        plt.ylabel("Amplitude")
-        plt.show()
+        if self.show_plot.get():
+            plt.plot(time, npdata[:], label="Audio data")
+            plt.plot(time, peak_left, label="Peak")
+            plt.plot(time, rms, label="Reference dB")
+            plt.legend()
+            plt.xlabel("Time [s]")
+            plt.ylabel("Amplitude")
+            plt.show()
 
 
 logger.info('Creating window')

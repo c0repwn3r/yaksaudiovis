@@ -4,13 +4,18 @@
 #
 # Copyright (c) 2021 c0repwn3r
 #
+import os
+
 import logger
 import lolcat
 import tkinter as tk
 from tkinter import ttk
-from tkinter import filedialog
-import matplotlib
-from matplotlib import font_manager
+from scipy.io import wavfile
+import numpy as np
+import matplotlib.pyplot as plt
+from time import perf_counter, sleep
+import math
+import easygui
 
 logger = logger.Logger('MainThread', logger.LogLevel.DEBUG)  # Setup main thread logger
 
@@ -47,9 +52,6 @@ class App(ttk.Frame):
         self.enable_peakcount = tk.BooleanVar(value=True)
         self.enable_average = tk.BooleanVar(value=True)
 
-        self.custom_sample_size = tk.BooleanVar(value=False)
-        self.use_stereo = tk.BooleanVar(value=False)
-
         self.file_location = tk.StringVar()
 
         self.progress_var = tk.DoubleVar(value=0.0)
@@ -71,17 +73,6 @@ class App(ttk.Frame):
             self.options_frame, text="Enable average vol.", variable=self.enable_average, command=self.reevaluate_options
         )
         self.average_chk.grid(row=1, column=0, padx=5, pady=10, sticky="nswe")
-
-        self.custom_sample_size_chk = ttk.Checkbutton(
-            self.options_frame, text="Custom sample size", variable=self.custom_sample_size, command=self.reevaluate_options
-        )
-        self.custom_sample_size_chk.grid(row=2, column=0, padx=5, pady=10, sticky="nswe")
-
-        self.use_stereo_chk = ttk.Checkbutton(
-            self.options_frame, text="Analyze both channels", variable=self.custom_sample_size,
-            command=self.reevaluate_options
-        )
-        self.use_stereo_chk.grid(row=2, column=0, padx=5, pady=10, sticky="nswe")
 
         # Control
         self.files = ttk.LabelFrame(self, text="Control", padding=(20, 10))  # Frame to contain options
@@ -106,21 +97,21 @@ class App(ttk.Frame):
             self.files,
             text="0/9 Ready",
             justify="center",
-            font=("-size", 15, "-weight", "bold")
+            font=("-size", 12)
         )
         self.label.grid(
             row=2, column=0, padx=5, pady=10, sticky="nswe"
         )
 
         self.progress = ttk.Progressbar(
-            self.files, value=0, variable=self.progress_var, mode="determinate", length=6
+            self.files, value=0, variable=self.progress_var, mode="determinate", maximum=6
         )
         self.progress.grid(
             row=3, column=0, padx=5, pady=10, sticky="nswe"
         )
 
         self.task_progress = ttk.Progressbar(
-            self.files, value=0, variable=self.task_progress_var, mode="determinate", length=0
+            self.files, value=0, variable=self.task_progress_var, mode="determinate", maximum=100
         )
         self.task_progress.grid(
             row=4, column=0, padx=5, pady=10, sticky="nswe"
@@ -133,30 +124,120 @@ class App(ttk.Frame):
         self.go_btn['state'] = 'enabled'
 
     def select_file(self, smth):
-        root = tk.Tk()
-        root.withdraw()
-        _file = filedialog.askopenfilename()
+        _file = easygui.fileopenbox()
         self.file_location.set(_file)
 
     def set_progress(self, msg, amt):
-        self.progress_var.set(amt / 6)
-        self.label['text'] = msg
-        window.update_idletasks()
-        self.update_idletasks()
-        self.update()
-        window.update()
+        self.task_progress['maximum'] = 7
+        self.progress_var.set(amt)
+        self.label['text'] = str(amt) + '/7 ' + msg
 
-    def set_task_progress(self, amt, total):
-        self.task_progress['length'] = total
-        self.task_progress_var.set(amt / total)
         window.update_idletasks()
-        self.update_idletasks()
-        self.update()
+
+    def set_task_progress(self, amt):
+        self.task_progress_var.set(amt)
+        window.update_idletasks()
         window.update()
 
     def go(self):
-        self.set_progress('Updating font cache', 1)
-        self.set_progress('Importing audio data', 2)
+        # 0/7 Ready
+        # 1/7 Rebuilding fontcache
+        # 2/7 Importing audio
+        # 3/7 Reading metadata
+        # 4/7 Mapping in timespace
+        # 5/7 Transposing data
+        # 6/7 Analyzing
+        # 7/7 Done
+        analysis_start_time = perf_counter()
+        logger.info('Starting analysis')
+        self.set_progress('Validating input', 0)
+        file_loc = self.file_location.get()
+        logger.debug('Checking for valid file path')
+
+        if not os.path.exists(file_loc):
+            logger.error('Invalid or nonexistent input path')
+            self.set_progress('Invalid input file', 0)
+            return
+
+        logger.info('Triggering matplotlib fontcache rebuild')
+        self.set_progress('Rebuilding fontcache', 1)
+
+        logger.info('Importing audio')
+        self.set_progress('Importing audio', 2)
+
+        start_time = perf_counter()
+        samplerate, data = wavfile.read(file_loc)
+        logger.debug(f'Samplerate: {samplerate}')
+        logger.warn('Ignore the WavFileWarning, it\'s caused by WAV metadata that scipy can\'t understand')
+        logger.info(f'Imported audio file from {file_loc} in {perf_counter() - start_time} seconds')
+
+        self.set_progress('Importing metadata', 3)
+        logger.info('Reading additional info from file')
+
+        length = data.shape[0] / samplerate
+
+        self.set_progress('Mapping to timespace', 4)
+        logger.info('Executing npinspace')
+
+        time = np.linspace(0., length, data.shape[0])
+        npdata = data
+        data = data.tolist()
+        left, right = [], []
+
+        self.set_progress('Transposing data', 5)
+        logger.info('Transposing data')
+
+        start_time = perf_counter()
+
+        total = len(data)
+        self.task_progress['maximum'] = total
+        p = 0
+        for index, val in enumerate(data):
+            if p == 50:
+                self.set_task_progress(index)
+                p = 0
+            p += 1
+            left.append(val)
+
+        logger.debug(f'Transposed {total} frames in {perf_counter() - start_time} seconds')
+
+        self.set_progress('Analyzing data', 6)
+
+        peak_left = [max(left)] * len(left)
+
+        if self.enable_peakcount.get():
+            peak_valley_count = len([left[idx] for idx in range(1, len(left) - 1) if left[idx + 1] >
+                                 left[idx] < left[idx - 1] or left[idx + 1] < left[idx] > left[idx - 1]])
+            logger.info(f'Peak/valley count: {peak_valley_count}')
+
+        rms = [20 * math.log10(abs(peak_left[0]))] * len(left)
+        logger.info(f'RMS volume level: {rms[0]}')
+
+        popup = tk.Toplevel(window)
+        popup.title('Results')
+        tk.Label(popup, text=f'RMS Volume: {round(rms[0], 3)}').pack()
+        if self.enable_peakcount.get():
+            tk.Label(popup, text=f'Peak count: {peak_valley_count}').pack()
+        tk.Label(popup, text=f'Audio length: {round(length, 2)}s').pack()
+        tk.Label(popup, text=f'Entries: {total}').pack()
+        tk.Label(popup, text=f'Samplerate: {samplerate}').pack()
+        if self.enable_average.get():
+            tk.Label(popup, text=f'Average: {sum(data) / len(data)}').pack()
+
+        rtime = perf_counter() - analysis_start_time
+        rtime = round(rtime, 3)
+        self.set_progress(f'Done ({rtime}s)', 7)
+        self.set_task_progress(0)
+
+        logger.info(f'Finished analysis in {rtime}s')
+
+        plt.plot(time, npdata[:], label="Audio data")
+        plt.plot(time, peak_left, label="Peak")
+        plt.plot(time, rms, label="Reference dB")
+        plt.legend()
+        plt.xlabel("Time [s]")
+        plt.ylabel("Amplitude")
+        plt.show()
 
 
 logger.info('Creating window')
